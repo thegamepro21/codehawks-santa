@@ -25,10 +25,14 @@ contract SantaToken is ERC20 {
         _mint(to, 1e18);
     }
 
+    function balance(address _user) public view returns (uint256) {
+        return balanceOf[_user];
+    }
+
     function burn(address from) external {
         if (msg.sender != i_santasList) {
             revert SantaToken__NotSantasList();
         }
-        _burn(from, 1e18);
+        _burn(from, 1e18); //@audit buying for someone cost 2 eth worth of tokens
     }
 }

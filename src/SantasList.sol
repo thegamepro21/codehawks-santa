@@ -56,7 +56,7 @@ import {SantaToken} from "./SantaToken.sol";
  * 
  * @notice Santas's naughty or nice list, all on chain!
  */
-contract SantasList is ERC721, TokenUri {
+contract SantasList is ERC721, TokenUri { //@audit Wrong naming, should be erc1155
     error SantasList__NotSanta();
     error SantasList__SecondCheckDoesntMatchFirst();
     error SantasList__NotChristmasYet();
@@ -118,6 +118,10 @@ contract SantasList is ERC721, TokenUri {
      * @param person The person to check
      * @param status The status of the person
      */
+
+    //@audit Missing modifier, function can be called by anyone
+    //@audit CheckTwice can be bypassed by setting status as extranice
+    
     function checkList(address person, Status status) external {
         s_theListCheckedOnce[person] = status;
         emit CheckedOnce(person, status);
@@ -131,7 +135,7 @@ contract SantasList is ERC721, TokenUri {
      * @param status The status of the person
      */
     function checkTwice(address person, Status status) external onlySanta {
-        if (s_theListCheckedOnce[person] != status) {
+        if (s_theListCheckedOnce[person] != status) { //@audit logic error, will revert 
             revert SantasList__SecondCheckDoesntMatchFirst();
         }
         s_theListCheckedTwice[person] = status;
@@ -144,11 +148,13 @@ contract SantasList is ERC721, TokenUri {
      *  - Extra Nice: Collect an NFT and a SantaToken
      * This should not be callable until Christmas 2023 (give or take 24 hours), and addresses should not be able to collect more than once.
      */
+    //@audit collectpresent does not update the status, hence user can keep withdrawing.
+    //@audit attacker can dos user by frontrunning them, setting the user satus as extranaughty with the checklist fucntion while user is trying to claim present
     function collectPresent() external {
         if (block.timestamp < CHRISTMAS_2023_BLOCK_TIME) {
             revert SantasList__NotChristmasYet();
         }
-        if (balanceOf(msg.sender) > 0) {
+        if (balanceOf(msg.sender) > 0) {// @audit Dos user can dos user by sending hime nft
             revert SantasList__AlreadyCollected();
         }
         if (s_theListCheckedOnce[msg.sender] == Status.NICE && s_theListCheckedTwice[msg.sender] == Status.NICE) {
@@ -162,16 +168,18 @@ contract SantasList is ERC721, TokenUri {
             i_santaToken.mint(msg.sender);
             return;
         }
-        revert SantasList__NotNice();
+        // revert SantasList__NotNice(); //@audit will cause the entire process to revert, therefore no present is minted
     }
 
     /* 
      * @notice Buy a present for someone else. This should only be callable by anyone with SantaTokens.
      * @dev You'll first need to approve the SantasList contract to spend your SantaTokens.
      */
-    function buyPresent(address presentReceiver) external {
-        i_santaToken.burn(presentReceiver);
-        _mintAndIncrement();
+    //@audit Attacker can mint Present to himself by passing in someelses address
+    //@audit Attacker can buy goods for free without paying
+    function buyPresent(address presentReceiver) external { //@audit Missing check if Present reciever is msg.sender
+        i_santaToken.burn(presentReceiver); 
+        _mintAndIncrement();//@audit Mints present to the msg.sender instead of someone elses
     }
 
     /*//////////////////////////////////////////////////////////////
