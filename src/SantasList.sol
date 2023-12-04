@@ -47,6 +47,7 @@
 pragma solidity 0.8.22;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TokenUri} from "./TokenUri.sol";
 import {SantaToken} from "./SantaToken.sol";
 
@@ -120,7 +121,7 @@ contract SantasList is ERC721, TokenUri { //@audit Wrong naming, should be erc11
      */
 
     //@audit Missing modifier, function can be called by anyone
-    //@audit CheckTwice can be bypassed by setting status as extranice
+    //@audit Attacker can stop user from collecting process by setting user status on their behalf
     
     function checkList(address person, Status status) external {
         s_theListCheckedOnce[person] = status;
@@ -134,6 +135,8 @@ contract SantasList is ERC721, TokenUri { //@audit Wrong naming, should be erc11
      * @param person The person to check
      * @param status The status of the person
      */
+
+    //@audit user can set status to extranice and the function wont revert
     function checkTwice(address person, Status status) external onlySanta {
         if (s_theListCheckedOnce[person] != status) { //@audit logic error, will revert 
             revert SantasList__SecondCheckDoesntMatchFirst();
@@ -150,7 +153,8 @@ contract SantasList is ERC721, TokenUri { //@audit Wrong naming, should be erc11
      */
     //@audit collectpresent does not update the status, hence user can keep withdrawing.
     //@audit attacker can dos user by frontrunning them, setting the user satus as extranaughty with the checklist fucntion while user is trying to claim present
-    function collectPresent() external {
+    //@audit user checkedonce can still collect present
+    function collectPresent() external returns (uint256){
         if (block.timestamp < CHRISTMAS_2023_BLOCK_TIME) {
             revert SantasList__NotChristmasYet();
         }
@@ -159,14 +163,14 @@ contract SantasList is ERC721, TokenUri { //@audit Wrong naming, should be erc11
         }
         if (s_theListCheckedOnce[msg.sender] == Status.NICE && s_theListCheckedTwice[msg.sender] == Status.NICE) {
             _mintAndIncrement();
-            return;
+            return balanceOf(msg.sender);
         } else if (
             s_theListCheckedOnce[msg.sender] == Status.EXTRA_NICE
                 && s_theListCheckedTwice[msg.sender] == Status.EXTRA_NICE
         ) {
-            _mintAndIncrement();
+            _mintAndIncrement();// fucntion does not mint nft or tokens with extranice status
             i_santaToken.mint(msg.sender);
-            return;
+            return IERC20(address(i_santaToken)).balance(msg.sender);
         }
         // revert SantasList__NotNice(); //@audit will cause the entire process to revert, therefore no present is minted
     }
@@ -176,9 +180,10 @@ contract SantasList is ERC721, TokenUri { //@audit Wrong naming, should be erc11
      * @dev You'll first need to approve the SantasList contract to spend your SantaTokens.
      */
     //@audit Attacker can mint Present to himself by passing in someelses address
-    //@audit Attacker can buy goods for free without paying
+    //@audit Present price should be 2eth worth of tokens
+    
     function buyPresent(address presentReceiver) external { //@audit Missing check if Present reciever is msg.sender
-        i_santaToken.burn(presentReceiver); 
+        i_santaToken.burn(presentReceiver); //@audit inout parameter should be msg.sender will revert due to underflow
         _mintAndIncrement();//@audit Mints present to the msg.sender instead of someone elses
     }
 
